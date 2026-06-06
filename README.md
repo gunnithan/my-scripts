@@ -6,5 +6,5 @@ Welcome to my personal server automation repository. Below is a directory of the
 
 * **[Discogs Chart Exporter](./discogs-chart-exporter/)** A media library gap-filler that exports reference playlists of the absolute most wanted albums based on primary genre/style filters. See the folder for custom `.env` variable setup.
   
-* **[Plex Metadata Tagger](./plex-tagger-readme.md)**
+* **[Plex Metadata Tagger](./plex-tagger-readme.md)** - ( coming soon )
   Automates local asset matching for specialized audio folders.
