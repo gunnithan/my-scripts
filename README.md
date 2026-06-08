@@ -8,3 +8,5 @@ Welcome to my personal server automation repository. Below is a directory of the
   
 * **[Plex Metadata Tagger](./plex-tagger-readme.md)** - ( coming soon )
   Automates local asset matching for specialized audio folders.
+
+* **[Interactive Music Organiser](./organiser.sh)** An interactive Bash tool for flattening out or structuring music folders. It automatically shifts raw Artist - Album (Year) directories into neat, nested Artist/Album structures with a terminal preview and manual input overrides. See the script directory for interactive prompt usage.
