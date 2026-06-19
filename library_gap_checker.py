@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """
 Author: Girish Unnithan
-Description: Media Library Gap Checker
-Checks Discogs flat CSV charts against a local library and reports missing entries.
+Description: Media Library Gap Checker (CSV Output Edition)
+Checks Discogs flat CSV charts against a local library and reports missing entries as CSV.
 """
 
 import os
@@ -10,10 +10,10 @@ import re
 import csv
 import glob
 
-# Paths based on your server setup
+# Paths based on your updated setup
 CHARTS_DIR = "/mnt/wd/charts"
-LOCAL_LIBRARY_DIR = "/mnt/wd/music/Albums"
-OUTPUT_GAP_DIR = "/mnt/wd/charts/gaps"
+LOCAL_LIBRARY_DIR = "/mnt/wd/music"
+OUTPUT_GAP_DIR = "/mnt/wd/gaps"
 
 def clean_string_for_matching(text):
     """
@@ -40,16 +40,13 @@ def scan_local_library(library_path):
 
     print(f"Scanning local library at: {library_path}...")
     
-    # Iterate through all entries in the directory
     for folder_name in os.listdir(library_path):
         folder_full_path = os.path.join(library_path, folder_name)
         
-        # Only process directories
         if not os.path.isdir(folder_full_path):
             continue
             
-        # Regex to parse 'Artist - Album (Year)' 
-        # Accounts for spaces and matches standard year formats at the end
+        # Regex to parse 'Artist - Album (Year)'
         match = re.match(r'^(.+?)\s+-\s+(.+?)\s*\(\d{4}\)$', folder_name)
         
         if match:
@@ -61,10 +58,8 @@ def scan_local_library(library_path):
             
             local_inventory.add((clean_artist, clean_album))
         else:
-            # Fallback if folder formatting slightly misses the year tag
             if " - " in folder_name:
                 parts = folder_name.split(" - ", 1)
-                # Strip out trailing year if it's there but didn't match the main regex
                 album_part = re.sub(r'\s*\(\d{4}\)$', '', parts[1])
                 
                 clean_artist = clean_string_for_matching(parts[0])
@@ -88,6 +83,8 @@ def check_gaps_in_csv(csv_path, local_inventory):
             album_artist = row.get("album artist", "").strip()
             rank = row.get("rank", "0")
             year = row.get("year", "Unknown")
+            genre = row.get("genre", "")
+            style = row.get("style", "")
             
             clean_chart_artist = clean_string_for_matching(album_artist)
             clean_chart_album = clean_string_for_matching(album_name)
@@ -97,24 +94,20 @@ def check_gaps_in_csv(csv_path, local_inventory):
             if match_key not in local_inventory:
                 missing_albums.append({
                     "rank": rank,
-                    "artist": album_artist,
-                    "album": album_name,
-                    "year": year
+                    "album artist": album_artist,
+                    "album name": album_name,
+                    "year": year,
+                    "genre": genre,
+                    "style": style
                 })
                 
     return missing_albums, total_chart_items
 
 def main():
-    print("--- Discogs Media Library Gap Checker ---")
+    print("--- Discogs Media Library Gap Checker (CSV Output) ---")
     
-    # Cache local inventory first to keep lookup speeds at O(1)
     local_inventory = scan_local_library(LOCAL_LIBRARY_DIR)
     
-    if not local_inventory:
-        print("No local files matched the 'Artist - Album (Year)' naming scheme. Please check your folder layouts.")
-        # We can still proceed but it will just flag everything as missing
-    
-    # Locate all compiled reference charts
     csv_pattern = os.path.join(CHARTS_DIR, "*.csv")
     chart_files = glob.glob(csv_pattern)
     
@@ -133,31 +126,21 @@ def main():
         
         missing, total_count = check_gaps_in_csv(csv_file, local_inventory)
         
-        # Generate the name for the output gap report text file
-        report_filename = base_filename.replace(".csv", "_missing_report.txt")
+        # Swapped suffix out to .csv instead of .txt
+        report_filename = base_filename.replace(".csv", "_missing_report.csv")
         report_path = os.path.join(OUTPUT_GAP_DIR, report_filename)
         
-        with open(report_path, mode="w", encoding="utf-8") as report:
-            report.write(f"=================================================================\n")
-            report.write(f"Missing Album Report for: {base_filename}\n")
-            report.write(f"Source Chart Size: {total_count} records\n")
-            report.write(f"Total Items Missing from Local Storage: {len(missing)}\n")
-            report.write(f"=================================================================\n\n")
+        # Fieldnames layout matching your original preferences
+        fieldnames = ["rank", "album name", "album artist", "year", "genre", "style"]
+        
+        with open(report_path, mode="w", newline="", encoding="utf-8") as file:
+            writer = csv.DictWriter(file, fieldnames=fieldnames)
+            writer.writeheader()
             
-            if not missing:
-                report.write("Perfect match! You have every single album from this list.\n")
-            else:
-                report.write(f"{'Rank':<6} | {'Artist':<30} | {'Album Name':<40} | {'Year':<6}\n")
-                report.write(f"{'-'*6}-+-{'-'*30}-+-{'-'*40}-+-{'-'*6}\n")
-                
-                for item in missing:
-                    # Truncate strings slightly if they are massive to keep the report neat
-                    artist_disp = item['artist'][:28] + ".." if len(item['artist']) > 30 else item['artist']
-                    album_disp = item['album'][:38] + ".." if len(item['album']) > 40 else item['album']
+            for item in missing:
+                writer.writerow(item)
                     
-                    report.write(f"{item['rank']:<6} | {artist_disp:<30} | {album_disp:<40} | {item['year']:<6}\n")
-                    
-        print(f" -> Analysis complete. {len(missing)} gaps found. Report logged to {report_path}\n")
+        print(f" -> Analysis complete. {len(missing)} gaps found. Saved directly to {report_path}\n")
 
 if __name__ == "__main__":
     main()
