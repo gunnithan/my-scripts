@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Author: Girish Unnithan
-Description: Media Library Gap Checker (CSV Output Edition)
+Description: Media Library Gap Checker (Multilingual & Special Edition Fix)
 Checks Discogs flat CSV charts against a local library and reports missing entries as CSV.
 """
 
@@ -10,28 +10,51 @@ import re
 import csv
 import glob
 
-# Paths based on your updated setup
 CHARTS_DIR = "/mnt/wd/charts"
-LOCAL_LIBRARY_DIR = "/mnt/wd/music"
+LOCAL_LIBRARY_DIR = "/mnt/wd/music/albums"
 OUTPUT_GAP_DIR = "/mnt/wd/gaps"
 
 def clean_string_for_matching(text):
     """
-    Mirroring the exact cleanup logic from discogs_flat_exporter.py.
-    Leaves 'The' intact, strips trailing asterisks and bracketed database numbers.
+    Advanced normalization to handle multilingual entries, 
+    special edition brackets, punctuation, and artist variations.
     """
     if not text:
         return ""
+    
+    # Convert to lowercase
     text = text.lower().strip()
+    
+    # 1. Split on '=' to discard translated non-English metadata (e.g. "Kanye West = カニエ・ウェスト")
+    if "=" in text:
+        text = text.split("=", 1)[0].strip()
+        
+    # 2. Standardise Compilation Artists to match your "Various Artists" scheme
+    if text in ["various", "various artists", "various - ost", "ost"] or "/ ost" in text:
+        return "various artists"
+        
+    # 3. Strip out common edition tags that mess up the album folder matches
+    # This handles variants like [Expanded Edition], (50th Anniversary), [2023 Remaster]
+    text = re.sub(r'\[.*?remaster.*?\]|\(.*?remaster.*?\)', '', text)
+    text = re.sub(r'\[.*?edition.*?\]|\(.*?edition.*?\)', '', text)
+    text = re.sub(r'\[.*?anniversary.*?\]|\(.*?anniversary.*?\)', '', text)
+    text = re.sub(r'\[.*?soundtrack.*?\]|\(.*?soundtrack.*?\)', '', text)
+    
+    # 4. Remove trailing asterisks and discogs database numbers like (2) or [3]
     text = text.replace("*", "")
     text = re.sub(r'[\(\[][0-9]+[\)\]]', '', text)
+    
+    # 5. Standardise symbols and clear out lingering non-alphanumeric punctuation
+    text = text.replace("&", "and")
+    text = re.sub(r"[^\w\s]", "", text)
+    
+    # Collapse multiple spaces down to a single space
+    text = re.sub(r"\s+", " ", text)
+    
     return text.strip()
 
 def scan_local_library(library_path):
-    """
-    Scans the local library for directories matching 'Artist - Album (Year)'.
-    Returns a set of unique (cleaned_artist, cleaned_album) tuples.
-    """
+    """Scans the local library and robustly caches the normalized (artist, album) pairs."""
     local_inventory = set()
     
     if not os.path.exists(library_path):
@@ -46,24 +69,17 @@ def scan_local_library(library_path):
         if not os.path.isdir(folder_full_path):
             continue
             
-        # Regex to parse 'Artist - Album (Year)'
-        match = re.match(r'^(.+?)\s+-\s+(.+?)\s*\(\d{4}\)$', folder_name)
-        
-        if match:
-            raw_artist = match.group(1)
-            raw_album = match.group(2)
+        if " - " in folder_name:
+            parts = folder_name.split(" - ", 1)
+            raw_artist = parts[0]
+            
+            # Remove the year designation at the end, e.g. (1993) or (2023]
+            raw_album = re.sub(r'\s*[\(\[]\d{4}[\)\]]$', '', parts[1])
             
             clean_artist = clean_string_for_matching(raw_artist)
             clean_album = clean_string_for_matching(raw_album)
             
-            local_inventory.add((clean_artist, clean_album))
-        else:
-            if " - " in folder_name:
-                parts = folder_name.split(" - ", 1)
-                album_part = re.sub(r'\s*\(\d{4}\)$', '', parts[1])
-                
-                clean_artist = clean_string_for_matching(parts[0])
-                clean_album = clean_string_for_matching(album_part)
+            if clean_artist and clean_album:
                 local_inventory.add((clean_artist, clean_album))
 
     print(f"Found {len(local_inventory)} valid local albums cached for matching.\n")
@@ -104,7 +120,7 @@ def check_gaps_in_csv(csv_path, local_inventory):
     return missing_albums, total_chart_items
 
 def main():
-    print("--- Discogs Media Library Gap Checker (CSV Output) ---")
+    print("--- Discogs Media Library Gap Checker (Multilingual Fix) ---")
     
     local_inventory = scan_local_library(LOCAL_LIBRARY_DIR)
     
@@ -113,24 +129,23 @@ def main():
     
     if not chart_files:
         print(f"No Discogs reference CSV files found in {CHARTS_DIR}.")
-        print("Please run your discogs_flat_exporter.py script first.")
         return
         
     os.makedirs(OUTPUT_GAP_DIR, exist_ok=True)
     
-    print(f"Discovered {len(chart_files)} chart reference files to cross examine.")
-    
     for csv_file in chart_files:
         base_filename = os.path.basename(csv_file)
+        
+        if "local_library_inventory" in base_filename:
+            continue
+            
         print(f"Processing: {base_filename}...")
         
         missing, total_count = check_gaps_in_csv(csv_file, local_inventory)
         
-        # Swapped suffix out to .csv instead of .txt
         report_filename = base_filename.replace(".csv", "_missing_report.csv")
         report_path = os.path.join(OUTPUT_GAP_DIR, report_filename)
         
-        # Fieldnames layout matching your original preferences
         fieldnames = ["rank", "album name", "album artist", "year", "genre", "style"]
         
         with open(report_path, mode="w", newline="", encoding="utf-8") as file:
@@ -140,7 +155,7 @@ def main():
             for item in missing:
                 writer.writerow(item)
                     
-        print(f" -> Analysis complete. {len(missing)} gaps found. Saved directly to {report_path}\n")
+        print(f" -> Complete. Found {len(missing)} missing items out of {total_count} records.\n")
 
 if __name__ == "__main__":
     main()
