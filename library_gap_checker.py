@@ -12,7 +12,7 @@ import glob
 
 # Paths based on your server setup
 CHARTS_DIR = "/mnt/wd/charts"
-LOCAL_LIBRARY_DIR = "/mnt/wd/Music/Albums"
+LOCAL_LIBRARY_DIR = "/mnt/wd/music/Albums"
 OUTPUT_GAP_DIR = "/mnt/wd/charts/gaps"
 
 def clean_string_for_matching(text):
